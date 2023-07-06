@@ -3,17 +3,18 @@
   "version": "0.0.1",
   "scripts": {
     "build": "rollup -c",
-    "dev": "rollup -c -w",
-    "postinstall": "mkdir -p node_modules/pyodide && cd node_modules/pyodide && curl -L https://github.com/pyodide/pyodide/releases/download/0.23.2/pyodide-0.23.2.tar.bz2 | tar -xj --strip-components 1 pyodide"
+    "dev": "rollup -c -w"
   },
   "dependencies": {
     "@rollup/plugin-commonjs": "^24.0.0",
+    "@rollup/plugin-terser": "^0.4.3",
     "@rollup/plugin-typescript": "^11.0.0",
     "commander": "^10.0.0",
-    "rollup": "^3.10.0",
-    "rollup-plugin-polyfill-node": "^0.11.0",
+    "local-echo": "github:varGeneric/local-echo",
+    "pyodide": "https://github.com/mauricelam/pyodide-built/tarball/f7c7744f29c28551d3470972fc6f8f054b3499d8",
+    "rollup": "^3.26.1",
+    "rollup-plugin-polyfill-node": "^0.12.0",
     "rollup-plugin-postcss": "^4.0.2",
-    "rollup-plugin-terser": "^7.0.2",
     "tslib": "^2.4.1",
     "xterm": "^5.1.0",
     "xterm-addon-fit": "^0.7.0"

@@ -16,16 +16,14 @@ class pyscriptXtermElement extends xtermElement {
 
     connectedCallback(): void {
         super.connectedCallback();
-        this.addPythonCommands(globalThis['pyscript'])
+        this.addPythonCommands(globalThis['pyscript']);
         this.addEventListener('focusin', (event) => {
-            this.addEventListener('copy', this.blockCopy)
-        }
-        )
+            this.addEventListener('copy', this.blockCopy);
+        });
 
         this.addEventListener('focusout', (event) => {
-            this.removeEventListener('copy', this.blockCopy)
-        }
-        )
+            this.removeEventListener('copy', this.blockCopy);
+        });
     }
 
     addPythonCommands(pyscriptModule) {

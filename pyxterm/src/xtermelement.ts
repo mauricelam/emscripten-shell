@@ -36,7 +36,7 @@ export class xtermElement extends HTMLElement {
         this.emsh = new Emshell(term, FS);
 
         const fit = new FitAddon();
-        term.loadAddon(fit)
+        term.loadAddon(fit);
 
         term.open(this);
         fit.fit();

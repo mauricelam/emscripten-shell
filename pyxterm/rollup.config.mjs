@@ -4,7 +4,7 @@ import { nodeResolve } from "@rollup/plugin-node-resolve"
 import postcss from 'rollup-plugin-postcss'
 import nodePolyfills from 'rollup-plugin-polyfill-node'
 import { string } from 'rollup-plugin-string'
-import { terser } from 'rollup-plugin-terser'
+import terser from '@rollup/plugin-terser'
 
 const output = [
     {

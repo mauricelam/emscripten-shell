@@ -1,5 +1,6 @@
 import type { Terminal } from "xterm";
 import { Command } from 'commander'
+import LocalEchoController from "local-echo";
 
 const version = "0.0.1"
 
@@ -16,39 +17,43 @@ export const defaultOutputConfig = {
 
 export const encodingUTF8 = { encoding: 'utf8' }
 export class Emshell {
-    terminal: Terminal
-    keyhandler: IDisposable
-    FS //Implements the Emscripten Filesystem API
-    commands = new Map<String, Command>()
-    muteShellLeader = false
-    
+    terminal: Terminal;
+    keyhandler: IDisposable;
+    FS; //Implements the Emscripten Filesystem API
+    commands = new Map<String, Command>();
+    muteShellLeader = false;
+    localEcho: LocalEchoController;
+
     currentLine = '';
 
 
     constructor (terminal: Terminal, FS) {
-        this.terminal = terminal
-        this.FS = FS
-        this.keyhandler = this.terminal.onKey(this.onKey.bind(this))
-        this.makeCommands()
+        this.terminal = terminal;
+        this.FS = FS;
+        this.localEcho = new LocalEchoController();
+        terminal.loadAddon(this.localEcho);
+        this.keyhandler = this.terminal.onKey(this.onKey.bind(this));
+        this.makeCommands();
     }
 
     onKey(e: {key: string, domEvent: KeyboardEvent}, f: void) {
         //console.log(e.key); // getting in browser console but Not in the browser itself
-        if (e.domEvent.key === 'Backspace'){
-            if (this.currentLine.length > 0){
-                this.write('\x1b[D \x1b[D')
-                this.currentLine = this.currentLine.substring(0, this.currentLine.length - 1)
-            }
-        } 
-        else if (e.key === '\r'){ //enter pressed
-            this.executeLine(this.currentLine)
-        } 
-        else {
-            if (e.key.length == 1){
-                this.currentLine += e.key
-            }
-            this.write(e.key);
-        }
+        // if (e.domEvent.key === 'Backspace'){
+        //     if (this.currentLine.length > 0){
+        //         this.write('\x1b[D \x1b[D')
+        //         this.currentLine = this.currentLine.substring(0, this.currentLine.length - 1)
+        //     }
+        // } else if (e.key === '\r'){ //enter pressed
+        //     this.executeLine(this.currentLine)
+        // } else if (e.domEvent.key === 'ArrowUp' || e.domEvent.key === 'ArrowDown') {
+        //     e.domEvent.stopPropagation();
+        //     e.domEvent.preventDefault();
+        // } else {
+        //     if (e.key.length == 1){
+        //         this.currentLine += e.key
+        //     }
+        //     this.write(e.key);
+        // }
     }
 
     write(value: any){
@@ -58,8 +63,9 @@ export class Emshell {
 
     newConsoleLine(){
         this.currentLine = ''
-        this.write('\n')
-        this.write('\x1b[93m' + this.linePrefix + '\x1b[0m')
+        this.localEcho.println('')
+        this.localEcho.read('\x1b[93m' + this.linePrefix + '\x1b[0m')
+            .then((line: String) => this.executeLine(line))
     }
 
     executeLine(line: String) {
@@ -98,7 +104,6 @@ export class Emshell {
             .description("List files")
             .argument('[path]', 'the path to list files from (optional)')
             .action((path: String, options) => {
-                this.write("\n")
                 if (!path){
                     path = '.'
                 }
@@ -132,7 +137,6 @@ export class Emshell {
         this.addCommand('pwd', new Command().name('pwd')
             .description("Gets the current working directory")
             .action((options) => {
-                this.write("\n")
                 this.write(this.FS.cwd())
                 this.newConsoleLine()
             })
@@ -143,14 +147,14 @@ export class Emshell {
             .description("Change the current working directory")
             .argument('[path]', 'the directory to change to')
             .action((path: String, options) => {
-                if (!path) this.write("\nYou must provide a [path] to change to")
+                if (!path) this.write("You must provide a [path] to change to\n")
                 else {
                     try {
                             const foundNode = this.FS.lookupPath(path)
                             this.FS.chdir(foundNode.path);
                         }
                         catch (error) {
-                            this.write(`\nCould not resolve path '${path}'`)
+                            this.write(`Could not resolve path '${path}'\n`)
                         }
                         this.newConsoleLine()
                 }
@@ -163,8 +167,6 @@ export class Emshell {
             .argument('<paths...>', 'The path(s) to the file to be printed')
             .option('-n', 'Print line numbers')
             .action((paths, options) => {
-                //this.write("\nThis command is not yet implemented")
-                this.write("\n")
                 paths.forEach((path, index) => {
                     try {
                         let contents = this.FS.readFile(path, encodingUTF8)
@@ -176,13 +178,13 @@ export class Emshell {
                     }
                     catch (err) {
                         console.error(err)
-                    }    
+                    }
                 });
 
                 this.newConsoleLine()
             })
             .configureOutput(defaultOutputConfig)
-        ) 
+        )
 
         this.addCommand('touch', new Command().name('touch')
             .description('Modify the access time for a file')
@@ -234,25 +236,23 @@ export class Emshell {
             })
             .configureOutput(defaultOutputConfig)
         )
-        
 
         this.addCommand('help', new Command().name('help')
             .description('Get help!')
             .argument('[command]', 'The command to get help with')
             .action((command) => {
                 if (command) {
-                    this.write("\n" + this.commands.get(command).helpInformation())
+                    this.write(this.commands.get(command).helpInformation() + "\n")
                 }
                 else {
-                    this.write(`\nEmscripten-Shell, version ${version}`)
-                    this.write("\nThese shell commands are defined internally.  Type `help' to see this list.")
-                    this.write("Type `help name' to find out more about the function `name'.")
-                    this.write("\n")
+                    this.write(`Emscripten-Shell, version ${version}\n`)
+                    this.write("These shell commands are defined internally.  Type `help' to see this list.\n")
+                    this.write("Type `help name' to find out more about the function `name'.\n")
                     //Display name and short description of each command
                     Array.from(this.commands.keys()).sort().forEach(key => {
-                        this.write(`\n ${key}`)
+                        this.write(` ${key}\n`)
                         const shortDescription = this.commands.get(key)?.summary() ? this.commands.get(key).summary() : this.commands.get(key).description()
-                        this.write(`\x1b[20G${shortDescription}`)
+                        this.write(`\x1b[20G${shortDescription}\n`)
                     })
                 }
                 this.newConsoleLine()

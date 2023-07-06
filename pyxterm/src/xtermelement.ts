@@ -22,18 +22,18 @@ export class xtermElement extends HTMLElement {
 
         let FS
 
-        const fsName = this.getAttribute("FS")        
-        if (fsName){
+        const fsName = this.getAttribute("FS")
+        if (fsName) {
             FS = eval(fsName)
         }
-        else if('pyscript' in globalThis){
+        else if ('pyscript' in globalThis) {
             FS = globalThis['pyscript'].interpreter.interface.FS
         }
         else {
             throw new EvalError(`Filesystem could not be indentified from FS=${fsName} or PyScript default`)
         }
 
-        this.emsh = new Emshell(term, FS);  
+        this.emsh = new Emshell(term, FS);
 
         const fit = new FitAddon();
         term.loadAddon(fit)
@@ -43,10 +43,10 @@ export class xtermElement extends HTMLElement {
 
         this.emsh.write("Started EmShell at " + String(new Date()))
         this.emsh.write("\nType 'help' to see a list of commands")
-        this.emsh.newConsoleLine()        
+        this.emsh.newConsoleLine()
     }
 }
 
-export function makeXtermElement(){
+export function makeXtermElement() {
     customElements.define("x-term", xtermElement)
 }

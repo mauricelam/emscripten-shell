@@ -2,9 +2,9 @@
 
 <head>
     <title>Webassembly playground</title>
-    <link rel="stylesheet" href="https://pyscript.net/latest/pyscript.css" />
+    <link rel="stylesheet" href="/include/pyscript.css" />
     <!-- <script defer src="https://jeff.glass/post/xterm/build/pyscript.min.js"></script> -->
-    <script defer src="https://pyscript.net/latest/pyscript.js"></script>
+    <script defer src="/include/pyscript.js"></script>
     <!-- <link rel="stylesheet" href="https://pyscript.net/unstable/pyscript.css"> -->
 </head>
 
@@ -12,6 +12,10 @@
     <py-config>
         plugins = ["./pyxterm/build/pyxterm.js"]
         packages = ["hashbang"]
+        [[interpreters]]
+        src = "/pyxterm/node_modules/pyodide/pyodide.js"
+        name = "pyodide"
+        lang = "python"
     </py-config>
 
     <py-xterm></py-xterm>

@@ -3,7 +3,8 @@
   "version": "0.0.1",
   "scripts": {
     "build": "rollup -c",
-    "dev": "rollup -c -w"
+    "dev": "rollup -c -w",
+    "postinstall": "mkdir -p node_modules/pyodide && cd node_modules/pyodide && curl -L https://github.com/pyodide/pyodide/releases/download/0.23.2/pyodide-0.23.2.tar.bz2 | tar -xj --strip-components 1 pyodide"
   },
   "dependencies": {
     "@rollup/plugin-commonjs": "^24.0.0",

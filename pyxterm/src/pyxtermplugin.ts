@@ -17,16 +17,14 @@ class pyscriptXtermElement extends xtermElement {
     connectedCallback(): void {
         super.connectedCallback();
         this.addPythonCommands(globalThis['pyscript'])
-        this.addEventListener('focusin', (event) => 
-            {
-                this.addEventListener('copy', this.blockCopy)
-            }
+        this.addEventListener('focusin', (event) => {
+            this.addEventListener('copy', this.blockCopy)
+        }
         )
 
-        this.addEventListener('focusout', (event) => 
-            {
-                this.removeEventListener('copy', this.blockCopy)
-            }
+        this.addEventListener('focusout', (event) => {
+            this.removeEventListener('copy', this.blockCopy)
+        }
         )
     }
 
@@ -35,9 +33,9 @@ class pyscriptXtermElement extends xtermElement {
             .description("Run the python interpreter")
             .option('-m <path>', "Run the specified python module")
             .action(options => {
-                if (options.m){
-                    try{
-                        const modulesrc = this.emsh.FS.readFile(options.m, encodingUTF8)    
+                if (options.m) {
+                    try {
+                        const modulesrc = this.emsh.FS.readFile(options.m, encodingUTF8)
                         pyscriptModule.interpreter.interface.runPython(modulesrc)
                         this.emsh.newConsoleLine()
                     }
@@ -54,7 +52,7 @@ class pyscriptXtermElement extends xtermElement {
 
                     this.emsh.keyhandler.dispose()
                     pyInterp.beginInteraction()
-                    
+
                     this.emsh.keyhandler = this.emsh.terminal.onKey(pyInterp.onKey)
                 }
             })
@@ -67,16 +65,16 @@ class pyscriptXtermElement extends xtermElement {
         pip.command('install')
             .argument('[packages...]', 'the packages to be installed')
             .action((packages) => {
-                    pyscriptModule.interpreter.interface.loadPackage(
-                        packages,
-                        (str) => {this.emsh.write(str + "\n")},
-                        (str) => {this.emsh.write(str + "\n")}
-                        )
+                pyscriptModule.interpreter.interface.loadPackage(
+                    packages,
+                    (str) => { this.emsh.write(str + "\n") },
+                    (str) => { this.emsh.write(str + "\n") }
+                )
 
-                    const importlib = pyscriptModule.interpreter.interface.pyimport("importlib")
-                    importlib.invalidate_caches()
+                const importlib = pyscriptModule.interpreter.interface.pyimport("importlib")
+                importlib.invalidate_caches()
 
-                    this.emsh.newConsoleLine()
+                this.emsh.newConsoleLine()
             })
             .configureOutput(defaultOutputConfig)
 
@@ -88,8 +86,11 @@ class pyscriptXtermElement extends xtermElement {
     }
 }
 export default class pyXtermPlugin {
-    afterSetup(runtime) {
-        customElements.define("py-xterm", pyscriptXtermElement)
+    afterSetup(interpreter) {
+        setTimeout(() => {
+            // Wait for pyscript things to finish initializing. (pyscript.interpreter in particular)
+            customElements.define("py-xterm", pyscriptXtermElement)
+        }, 0);
     }
     beforePyScriptExec() { }
 

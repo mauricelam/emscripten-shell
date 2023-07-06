@@ -108,3 +108,5 @@ build
 
 #Test file
 test.html
+
+.DS_Store

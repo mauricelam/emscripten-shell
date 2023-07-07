@@ -1,8 +1,9 @@
 import type { Terminal } from "xterm";
 import { Command } from 'commander'
 import LocalEchoController from "local-echo";
+import * as shellquote from 'shell-quote';
 
-const version = "0.0.1"
+const version = "0.0.2"
 
 type IDisposable = {
     dispose(): void
@@ -60,8 +61,12 @@ export class Emshell {
                     console.warn(e);
                 }
             } else {
-                const line = await this.localEcho.read(this.linePrefix)
-                await this.executeLine(line)
+                try {
+                    const line = await this.localEcho.read(this.linePrefix)
+                    await this.executeLine(line)
+                } catch (e) {
+                    this.write(`\x1b[91m${e.message}\x1b[0m\n`)
+                }
             }
         }
     }
@@ -90,20 +95,68 @@ export class Emshell {
     }
 
     async executeLine(line: String) {
-        // Try to execute first token as command
-        const tokens = line.split(' ')
-        if (this.commands.has(tokens[0])) {
-            const command = this.commands.get(tokens[0])
-            try {
-                await command.parseAsync(tokens.slice(1), { from: 'user' })
-            } catch (e) {
-                console.warn(e);
+        // Recursive descent parsing
+
+        let runExpression = async (tokens) => {
+            const opIndex = tokens.findIndex((tok) => typeof tok === 'object' && (tok.op === '&&' || tok.op === '||' || tok.op === ';'))
+            if (opIndex === -1) {
+                return await runPipes(tokens);
             }
-        } else {
-            this.write(`No command found matching '${line}'. Known commands are `)
-            this.write(Array.from(this.commands.keys()).join(', '))
-            this.write('\n')
+            const left = tokens.slice(0, opIndex);
+            const right = tokens.slice(opIndex + 1);
+            switch (tokens[opIndex].op) {
+                case '&&':
+                case ';':
+                    await runPipes(left);
+                    await runExpression(right);
+                    break
+                case '||':  // TODO: Implement exit code
+                    await runPipes(left);
+                    break
+                default:
+                    throw Error(`Unsupported operator ${tokens[opIndex].op}`)
+            }
         }
+
+        let runPipes = async (tokens) => {
+            const opIndex = tokens.findIndex((tok) => typeof tok === 'object' && (tok.op === '|'))
+            if (opIndex === -1) {
+                return await runSingleCommand(tokens);
+            }
+            const left = tokens.slice(0, opIndex);
+            const right = tokens.slice(opIndex + 1);
+            switch (tokens[opIndex].op) {
+                // case '|':
+                //     await runSingleCommand(left);
+                //     await runPipes(right);
+                //     break
+                default:
+                    throw Error(`Unsupported operator ${tokens[opIndex].op}`)
+            }
+        }
+
+        let runSingleCommand = async (tokens) => {
+            const operator = tokens.find((tok) => typeof tok === 'object')
+            if (operator !== undefined) {
+                throw Error(`Unsupported operator "${operator.op}"`)
+            }
+            if (this.commands.has(tokens[0])) {
+                const command = this.commands.get(tokens[0])
+                try {
+                    await command.parseAsync(tokens.slice(1), { from: 'user' })
+                } catch (e) {
+                    console.warn(e);
+                }
+            } else {
+                this.write(`No command found matching '${tokens[0]}'. Known commands are `)
+                this.write(Array.from(this.commands.keys()).join(', '))
+                this.write('\n')
+            }
+        }
+
+        const tokens = shellquote.parse(line)
+        console.log('tokens', tokens)
+        await runExpression(tokens)
     }
 
     addCommand(name: String, command: Command) {

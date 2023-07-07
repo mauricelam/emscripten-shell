@@ -29,54 +29,57 @@ class pyscriptXtermElement extends xtermElement {
     addPythonCommands(pyscriptModule) {
         this.emsh.addCommand('python', new Command().name('python')
             .description("Run the python interpreter")
+            .argument('[file]', 'Python file to execute')
             .option('-m <path>', "Run the specified python module")
-            .action(options => {
+            .action(async (path, options) => {
                 if (options.m) {
                     try {
                         const modulesrc = this.emsh.FS.readFile(options.m, encodingUTF8)
                         pyscriptModule.interpreter.interface.runPython(modulesrc)
-                        this.emsh.newConsoleLine()
-                    }
-                    catch (err) {
-                        this.emsh.write(`Could not read source path '${options.m}'`)
+                    } catch (err) {
+                        this.emsh.write(`Could not read source path '${options.m}'\n`)
                         console.error(err)
                     }
-
-                }
-                else {
-                    this.emsh.muteShellLeader = true
-                    const pyInterpClass = pyscriptModule.interpreter.interface.runPython(interactiveSrc)
-                    const pyInterp = pyInterpClass(this.emsh)
-
-                    this.emsh.keyhandler.dispose()
-                    pyInterp.beginInteraction()
-
-                    this.emsh.keyhandler = this.emsh.terminal.onKey(pyInterp.onKey)
+                } else if (path) {
+                    try {
+                        const filesrc = this.emsh.FS.readFile(path, encodingUTF8)
+                        pyscriptModule.interpreter.interface.runPython(filesrc)
+                    } catch (err) {
+                        this.emsh.write(`Could not read source path '${path}'\n`)
+                        console.error(err)
+                    }
+                } else {
+                    this.emsh.enterPythonMode(pyscriptModule, interactiveSrc)
                 }
             })
-            .configureOutput(defaultOutputConfig)
+            .configureOutput(defaultOutputConfig(this.emsh))
         )
 
         const pip = new Command().name('pip')
             .description("Install new packages")
+            .exitOverride();
 
         pip.command('install')
             .argument('[packages...]', 'the packages to be installed')
-            .action((packages) => {
-                pyscriptModule.interpreter.interface.loadPackage(
-                    packages,
-                    (str) => { this.emsh.write(str + "\n") },
-                    (str) => { this.emsh.write(str + "\n") }
-                )
+            .action(async (packages) => {
+                try {
+                    await pyscriptModule.interpreter.interface.loadPackage(
+                        packages,
+                        {
+                            messageCallback: (str) => { this.emsh.write(str + "\n") },
+                            errorCallback: (str) => { this.emsh.write(str + "\n") },
+                        }
+                    )
 
-                const importlib = pyscriptModule.interpreter.interface.pyimport("importlib")
-                importlib.invalidate_caches()
-
-                this.emsh.newConsoleLine()
+                    const importlib = pyscriptModule.interpreter.interface.pyimport("importlib")
+                    importlib.invalidate_caches()
+                } catch (e) {
+                    this.emsh.write(`\x1b[91m${e.message}\x1b[0m\n`)
+                }
             })
-            .configureOutput(defaultOutputConfig)
+            .configureOutput(defaultOutputConfig(this.emsh));
 
-        this.emsh.addCommand("pip", pip)
+        this.emsh.addCommand("pip", pip);
     }
 
     blockCopy(event) {

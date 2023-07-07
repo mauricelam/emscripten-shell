@@ -20,16 +20,6 @@ class xtermInteractive(InteractiveConsole):
         pass
 
     def beginInteraction(self, banner=None, exitmsg=None):
-        try:
-            sys.ps1
-        except AttributeError:
-            sys.ps1 = ">>> "
-        try:
-            sys.ps2
-        except AttributeError:
-            sys.ps2 = "... "
-
-        self.write("\n")
         cprt = 'Type "help", "copyright", "credits" or "license" for more information.'
         if banner is None:
             self.write("Python %s on %s\n%s\n" % (sys.version, sys.platform, cprt))
@@ -40,33 +30,31 @@ class xtermInteractive(InteractiveConsole):
         sys.stderr = self
 
         self.more = 0
-        self.write(sys.ps1)
 
-    def endInteraction(self):
-        self.emshell.restoreShell()
+    def executeLine(self, line):
+        js.console.log('line' + line)
+        self.more = self.push(line)
+
+    def getPromptString(self):
+        try:
+            ps1 = sys.ps1
+        except AttributeError:
+            ps1 = sys.ps1 = ">>> "
+        try:
+            ps2 = sys.ps2
+        except AttributeError:
+            ps2 = sys.ps2 = "... "
+        if self.more:
+            return (ps2, ps2)
+        else:
+            return (ps1, ps2)
 
     # onKey(e: {key: string, domEvent: KeyboardEvent}, f: void)
     def onKey(self, event, f):
         # js.console.log(f"Got key {event.key}")
         # js.console.log(to_js(event.domEvent))
-        if event.key == "\r":  # Enter
-            self.write("\n")
-            self.more = self.push(self.line)
-            self.line = ""
-            if self.more:
-                self.write(sys.ps2)
-            else:
-                self.write(sys.ps1)
-        elif event.domEvent.ctrlKey and event.domEvent.key == "d":
-            self.endInteraction()
-        elif event.domEvent.key == "Backspace":
-            if len(self.line):
-                self.line = self.line[:-1]
-                self.write("\x1b[D \x1b[D")
-        else:
-            if len(event.key) == 1:
-                self.line += event.key
-            self.write(event.key)
+        if event.domEvent.ctrlKey and event.domEvent.key == "d":
+            self.emshell.exitPythonMode()
 
 
 xtermInteractive

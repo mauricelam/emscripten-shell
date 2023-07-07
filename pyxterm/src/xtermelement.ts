@@ -9,13 +9,14 @@ export { defaultOutputConfig } from "./shell"
 export class xtermElement extends HTMLElement {
     FS //Implements the Emscripten Filesystem API
     emsh: Emshell
+    terminal: Terminal
 
     constructor() {
         super();
     }
 
     connectedCallback() {
-        const term = new Terminal({
+        this.terminal = new Terminal({
             allowProposedApi: true,
             cursorBlink: true,
         });
@@ -33,17 +34,17 @@ export class xtermElement extends HTMLElement {
             throw new EvalError(`Filesystem could not be indentified from FS=${fsName} or PyScript default`)
         }
 
-        this.emsh = new Emshell(term, FS);
+        this.emsh = new Emshell(this.terminal, FS);
 
         const fit = new FitAddon();
-        term.loadAddon(fit);
+        this.terminal.loadAddon(fit);
 
-        term.open(this);
+        this.terminal.open(this);
         fit.fit();
 
-        this.emsh.write("Started EmShell at " + String(new Date()))
-        this.emsh.write("\nType 'help' to see a list of commands")
-        this.emsh.newConsoleLine()
+        this.emsh.write(`Started EmShell at ${new Date()}\n`)
+        this.emsh.write("Type 'help' to see a list of commands\n")
+        this.emsh.shellRepl()
     }
 }
 

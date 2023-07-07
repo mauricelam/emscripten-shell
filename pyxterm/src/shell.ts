@@ -60,7 +60,6 @@ export class Emshell {
                     console.warn(e);
                 }
             } else {
-                console.log('shell repl here')
                 const line = await this.localEcho.read(this.linePrefix)
                 await this.executeLine(line)
             }
@@ -219,29 +218,20 @@ export class Emshell {
             .configureOutput(defaultOutputConfig(this))
         )
 
-        /* this.addCommand('mkdir', new Command().name('mkdir')
+        this.addCommand('mkdir', new Command().name('mkdir')
             .description("Create a new directory in the file system")
-            .argument('[path]', 'The directory to be created')
+            .argument('path', 'The directory to be created')
             .action(async (path) => {
-                this.write('\n')
-                if (!path){
-                    this.write("You must provide a path")
-                }
-                else {
-                    try{
-                        console.log(path)
-                        let result = this.FS.lookupPath(path)
-                        console.log(`Newpath: ${result}`)
-                        this.FS.mkdir(result.path)
-                    }
-                    catch (err) {
-                        this.write(`Unable to create directory at '${path}'`)
-                        console.error(err)
-                    }
+                try {
+                    console.log(path)
+                    this.FS.mkdir(path)
+                } catch (err) {
+                    this.write(`Unable to create directory at '${path}'\n`)
+                    console.error(err)
                 }
             })
             .configureOutput(defaultOutputConfig(this))
-        ) */
+        )
 
         this.addCommand('clear', new Command().name('clear')
             .description('Clear the screen')

@@ -18,12 +18,18 @@ export const defaultOutputConfig = (emsh) => {
     }
 }
 
+interface FileDescriptorSet {
+    stdin: string;
+    stdout: (l: String) => void;
+    stderr: (l: String) => void;
+}
+
 export const encodingUTF8 = { encoding: 'utf8' }
 export class Emshell {
     terminal: Terminal
     keyhandler: IDisposable
     FS //Implements the Emscripten Filesystem API
-    commands = new Map<String, Command>()
+    commands = new Map<String, (FileDescriptorSet) => Command>()
     localEcho: LocalEchoController
     alternateHistory = []
     pyInterp = null
@@ -97,74 +103,77 @@ export class Emshell {
     async executeLine(line: String) {
         // Recursive descent parsing
 
-        let runExpression = async (tokens) => {
+        let runExpression = async (tokens, fds: FileDescriptorSet) => {
             const opIndex = tokens.findIndex((tok) => typeof tok === 'object' && (tok.op === '&&' || tok.op === '||' || tok.op === ';'))
             if (opIndex === -1) {
-                return await runPipes(tokens);
+                return await runPipes(tokens, fds);
             }
             const left = tokens.slice(0, opIndex);
             const right = tokens.slice(opIndex + 1);
             switch (tokens[opIndex].op) {
                 case '&&':
                 case ';':
-                    await runPipes(left);
-                    await runExpression(right);
+                    await runPipes(left, fds);
+                    await runExpression(right, fds);
                     break
                 case '||':  // TODO: Implement exit code
-                    await runPipes(left);
+                    await runPipes(left, fds);
                     break
                 default:
                     throw Error(`Unsupported operator ${tokens[opIndex].op}`)
             }
         }
 
-        let runPipes = async (tokens) => {
+        let runPipes = async (tokens, fds: FileDescriptorSet) => {
             const opIndex = tokens.findIndex((tok) => typeof tok === 'object' && (tok.op === '|'))
             if (opIndex === -1) {
-                return await runSingleCommand(tokens);
+                return await runSingleCommand(tokens, fds);
             }
             const left = tokens.slice(0, opIndex);
             const right = tokens.slice(opIndex + 1);
             switch (tokens[opIndex].op) {
-                // case '|':
-                //     await runSingleCommand(left);
-                //     await runPipes(right);
-                //     break
+                case '|':
+                    let leftOutput = [];
+                    await runSingleCommand(left, { stdin: fds.stdin, stdout: (l) => leftOutput.push(l), stderr: fds.stderr });
+                    console.log('leftoutput', leftOutput, right)
+                    await runPipes(right, { stdin: leftOutput.join(''), stdout: fds.stdout, stderr: fds.stderr });
+                    break
                 default:
                     throw Error(`Unsupported operator ${tokens[opIndex].op}`)
             }
         }
 
-        let runSingleCommand = async (tokens) => {
+        let runSingleCommand = async (tokens, fds: FileDescriptorSet) => {
             const operator = tokens.find((tok) => typeof tok === 'object')
             if (operator !== undefined) {
                 throw Error(`Unsupported operator "${operator.op}"`)
             }
             if (this.commands.has(tokens[0])) {
-                const command = this.commands.get(tokens[0])
+                const command_fn = this.commands.get(tokens[0])
+                const command = command_fn(fds)
                 try {
                     await command.parseAsync(tokens.slice(1), { from: 'user' })
                 } catch (e) {
                     console.warn(e);
                 }
             } else {
-                this.write(`No command found matching '${tokens[0]}'. Known commands are `)
-                this.write(Array.from(this.commands.keys()).join(', '))
-                this.write('\n')
+                fds.stderr(`No command found matching '${tokens[0]}'. Known commands are `)
+                fds.stderr(Array.from(this.commands.keys()).join(', '))
+                fds.stderr('\n')
             }
         }
 
         const tokens = shellquote.parse(line)
         console.log('tokens', tokens)
-        await runExpression(tokens)
+        await runExpression(tokens, this.defaultFileDescriptorSet())
     }
 
-    addCommand(name: String, command: Command) {
+    addCommand(name: String, command: (fds: FileDescriptorSet) => Command) {
         this.commands.set(name, command)
     }
 
     makeCommands() {
-        this.addCommand('ls', new Command().name('ls')
+        this.addCommand('ls', (fds) => new Command().name('ls')
             .description("List files")
             .argument('[path]', 'the path to list files from (optional)')
             .action(async (path: String, options) => {
@@ -186,60 +195,68 @@ export class Emshell {
                             pre = '\x1b[96m'
                             post = '\x1b[0m'
                         }
-                        this.write(`${pre}${path}${post}  `)
+                        fds.stdout(`${pre}${path}${post}  `)
                     });
-                    this.write('\n')
+                    fds.stdout('\n')
                 }
                 catch (err) {
-                    this.write(`Could not print files from path ${path}`)
+                    fds.stderr(`Could not print files from path ${path}`)
                     console.error(err)
                 }
             })
             .configureOutput(defaultOutputConfig(this))
         )
 
-        this.addCommand('echo', new Command().name('echo')
+        this.addCommand('echo', (fds) => new Command().name('echo')
             .description('Write arguments to the standard output')
             .argument('[args...]', 'Arguments to be printed')
             .action(async (args) => {
-                this.write(`${args.join(" ")}\n`)
+                fds.stdout(`${args.join(" ")}\n`)
             })
             .configureOutput(defaultOutputConfig(this))
         )
 
-        this.addCommand('pwd', new Command().name('pwd')
+        this.addCommand('pwd', (fds) => new Command().name('pwd')
             .description("Gets the current working directory")
             .action(async (options) => {
-                this.write(this.FS.cwd())
-                this.write('\n')
+                fds.stdout(this.FS.cwd())
+                fds.stdout('\n')
             })
             .configureOutput(defaultOutputConfig(this))
         )
 
-        this.addCommand('cd', new Command().name('cd')
+        this.addCommand('cd', (fds) => new Command().name('cd')
             .description("Change the current working directory")
             .argument('[path]', 'the directory to change to')
             .action(async (path: String, options) => {
                 if (!path) {
-                    this.write("You must provide a [path] to change to\n")
+                    fds.stderr("You must provide a [path] to change to\n")
                 } else {
                     try {
                         const foundNode = this.FS.lookupPath(path)
                         this.FS.chdir(foundNode.path);
                     }
                     catch (error) {
-                        this.write(`Could not resolve path '${path}'\n`)
+                        fds.stderr(`Could not resolve path '${path}'\n`)
                     }
                 }
             })
             .configureOutput(defaultOutputConfig(this))
         )
 
-        this.addCommand('cat', new Command().name('cat')
+        this.addCommand('cat', (fds) => new Command().name('cat')
             .description('Print the contents of a file to the terminal')
             .argument('[paths...]', 'The path(s) to the file to be printed')
             .option('-n', 'Print line numbers')
             .action(async (paths, options) => {
+                if (!paths.length) {
+                    if (fds.stdin !== null) {
+                        fds.stdout(fds.stdin)
+                    } else {
+                        fds.stderr(`'cat' without input is supported\n`)
+                    }
+                    return
+                }
                 paths.forEach((path, index) => {
                     try {
                         let contents = this.FS.readFile(path, encodingUTF8)
@@ -247,31 +264,52 @@ export class Emshell {
                             console.log("LINE NUMBERS")
                             contents = contents.split('\n').map((line, index) => `${index + 1} ${line}`).join('\n')
                         }
-                        this.write(contents)
-                    }
-                    catch (err) {
+                        fds.stdout(contents)
+                    } catch (err) {
                         console.error(err)
+                        fds.stderr(`${err}\n`)
                     }
                 });
             })
             .configureOutput(defaultOutputConfig(this))
         )
 
-        this.addCommand('touch', new Command().name('touch')
+        this.addCommand('grep', (fds) => new Command().name('grep')
+            .description('The grep utility searches any given input files, selecting lines that match one or more patterns.')
+            .argument('pattern', 'Specify a pattern used during the search of the input: an input line is selected if it matches any of the specified patterns.')
+            // .argument('[paths...]', 'The path(s) to the file to be printed')
+            // .option('-n', 'Print line numbers')
+            .action(async (pattern, options) => {
+                if (fds.stdin !== null) {
+                    const regex = new RegExp(pattern)
+                    for (const line of fds.stdin.split('\n')) {
+                        const searchResult = line.search(regex)
+                        if (searchResult !== -1) {
+                            fds.stdout(line + '\n')
+                        }
+                    }
+                } else {
+                    fds.stderr(`'grep' without input is supported\n`)
+                }
+            })
+            .configureOutput(defaultOutputConfig(this))
+        )
+
+        this.addCommand('touch', (fds) => new Command().name('touch')
             .description('Modify the access time for a file')
             .argument('<path>', 'The path to the file to create or adjust the time on')
             .action(async (path) => {
                 try {
                     this.FS.writeFile(path, '')
                 } catch (err) {
-                    this.write(`Could not touch path ${path}\n`)
+                    fds.stderr(`Could not touch path ${path}\n`)
                     console.error(err)
                 }
             })
             .configureOutput(defaultOutputConfig(this))
         )
 
-        this.addCommand('mkdir', new Command().name('mkdir')
+        this.addCommand('mkdir', (fds) => new Command().name('mkdir')
             .description("Create a new directory in the file system")
             .argument('path', 'The directory to be created')
             .action(async (path) => {
@@ -279,14 +317,14 @@ export class Emshell {
                     console.log(path)
                     this.FS.mkdir(path)
                 } catch (err) {
-                    this.write(`Unable to create directory at '${path}'\n`)
+                    fds.stderr(`Unable to create directory at '${path}'\n`)
                     console.error(err)
                 }
             })
             .configureOutput(defaultOutputConfig(this))
         )
 
-        this.addCommand('clear', new Command().name('clear')
+        this.addCommand('clear', (fds) => new Command().name('clear')
             .description('Clear the screen')
             .action(async () => {
                 this.terminal.clear()
@@ -294,27 +332,36 @@ export class Emshell {
             .configureOutput(defaultOutputConfig(this))
         )
 
-        this.addCommand('help', new Command().name('help')
+        this.addCommand('help', (fds) => new Command().name('help')
             .description('Get help!')
             .argument('[command]', 'The command to get help with')
             .action(async (command) => {
                 if (command) {
-                    this.write(this.commands.get(command).helpInformation() + "\n")
+                    const thiscommand = this.commands.get(command)(this.defaultFileDescriptorSet())
+                    fds.stdout(thiscommand.helpInformation() + "\n")
                 } else {
-                    this.write(`Emscripten-Shell, version ${version}\n`)
-                    this.write("These shell commands are defined internally.  Type `help' to see this list.\n")
-                    this.write("Type `help name' to find out more about the function `name'.\n")
+                    fds.stdout(`Emscripten-Shell, version ${version}\n`)
+                    fds.stdout("These shell commands are defined internally.  Type `help' to see this list.\n")
+                    fds.stdout("Type `help name' to find out more about the function `name'.\n")
                     //Display name and short description of each command
                     Array.from(this.commands.keys()).sort().forEach(key => {
-                        this.write(` ${key}\n`)
-                        const shortDescription = this.commands.get(key)?.summary() ? this.commands.get(key).summary() : this.commands.get(key).description()
-                        this.write(`\x1b[20G${shortDescription}\n`)
+                        const thiscommand = this.commands.get(key)(this.defaultFileDescriptorSet())
+                        fds.stdout(` ${key}\n`)
+                        const shortDescription = thiscommand.summary() ? thiscommand.summary() : thiscommand.description()
+                        fds.stdout(`\x1b[20G${shortDescription}\n`)
                     })
                 }
             })
             .configureOutput(defaultOutputConfig(this))
         )
+    }
 
+    defaultFileDescriptorSet(): FileDescriptorSet {
+        return {
+            stdin: null,
+            stdout: this.write.bind(this),
+            stderr: this.write.bind(this),
+        }
     }
 
     get linePrefix() {

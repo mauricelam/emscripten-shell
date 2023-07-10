@@ -27,25 +27,24 @@ class pyscriptXtermElement extends xtermElement {
     }
 
     addPythonCommands(pyscriptModule) {
-        this.emsh.addCommand('python', new Command().name('python')
+        this.emsh.addCommand('python', (fds) => new Command().name('python')
             .description("Run the python interpreter")
             .argument('[file]', 'Python file to execute')
             .option('-m <path>', "Run the specified python module")
-            .action(async (path, options) => {
+            .action(async (file, options) => {
                 if (options.m) {
                     try {
-                        const modulesrc = this.emsh.FS.readFile(options.m, encodingUTF8)
-                        pyscriptModule.interpreter.interface.runPython(modulesrc)
+                        pyscriptModule.interpreter.interface.runPython(`import runpy; runpy.run_module('${options.m}')`)
                     } catch (err) {
-                        this.emsh.write(`Could not read source path '${options.m}'\n`)
+                        fds.stderr(`Error running python module '${options.m}'\n`)
                         console.error(err)
                     }
-                } else if (path) {
+                } else if (file) {
                     try {
-                        const filesrc = this.emsh.FS.readFile(path, encodingUTF8)
+                        const filesrc = this.emsh.FS.readFile(file, encodingUTF8)
                         pyscriptModule.interpreter.interface.runPython(filesrc)
                     } catch (err) {
-                        this.emsh.write(`Could not read source path '${path}'\n`)
+                        fds.stderr(`Could not read source file '${file}'\n`)
                         console.error(err)
                     }
                 } else {
@@ -55,31 +54,33 @@ class pyscriptXtermElement extends xtermElement {
             .configureOutput(defaultOutputConfig(this.emsh))
         )
 
-        const pip = new Command().name('pip')
-            .description("Install new packages")
-            .exitOverride();
+        this.emsh.addCommand("pip", (fds) => {
+            const pip = new Command().name('pip')
+                .description("Install new packages")
+                .exitOverride();
 
-        pip.command('install')
-            .argument('[packages...]', 'the packages to be installed')
-            .action(async (packages) => {
-                try {
-                    await pyscriptModule.interpreter.interface.loadPackage(
-                        packages,
-                        {
-                            messageCallback: (str) => { this.emsh.write(str + "\n") },
-                            errorCallback: (str) => { this.emsh.write(str + "\n") },
-                        }
-                    )
+            pip.command('install')
+                .argument('[packages...]', 'the packages to be installed')
+                .action(async (packages) => {
+                    try {
+                        await pyscriptModule.interpreter.interface.loadPackage(
+                            packages,
+                            {
+                                messageCallback: (str) => { fds.stdout(str + "\n") },
+                                errorCallback: (str) => { fds.stderr(str + "\n") },
+                            }
+                        )
 
-                    const importlib = pyscriptModule.interpreter.interface.pyimport("importlib")
-                    importlib.invalidate_caches()
-                } catch (e) {
-                    this.emsh.write(`\x1b[91m${e.message}\x1b[0m\n`)
-                }
-            })
-            .configureOutput(defaultOutputConfig(this.emsh));
+                        const importlib = pyscriptModule.interpreter.interface.pyimport("importlib")
+                        importlib.invalidate_caches()
+                    } catch (e) {
+                        fds.stderr(e.message + '\n')
+                    }
+                })
+                .configureOutput(defaultOutputConfig(this.emsh))
 
-        this.emsh.addCommand("pip", pip);
+            return pip
+        });
     }
 
     blockCopy(event) {

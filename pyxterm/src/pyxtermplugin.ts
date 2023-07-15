@@ -31,6 +31,7 @@ class PyscriptXtermElement extends XtermElement {
             .description('Python one liners to easily parse and process data in Python.')
             .argument('[args...]', 'Pyolin program to execute')
             .allowUnknownOption()
+            .helpOption(false)
             .action(async function (args) {
                 emsh.executeCommand(['python', '-m', 'pyolin', ...args], fds)
             })
@@ -40,20 +41,30 @@ class PyscriptXtermElement extends XtermElement {
             .argument('[args...]', 'Python file to execute')
             .option('-m <module>', "Run the specified python module")
             .option('-c <code>', "Program passed in as string")
+            .helpOption(false)  // Note: This is here just so that --help will be passed to the Python program
             .allowUnknownOption()
             .allowExcessArguments()
-            .action(async function (args, options) {
+            .action(async (args, options) => {
                 const stdin_iter = [fds.stdin].values()
                 this.pyodide.setStdin({
                     isatty: true,
                     stdin: () => stdin_iter.next().value,
                 })
+                let stderrStream = new TextDecoder()
+                let byteBuffer = new Uint8Array(new ArrayBuffer(1))
                 this.pyodide.setStderr({
-                    raw: (i) => fds.stderr(String.fromCharCode(i)),
+                    raw: (i) => {
+                        byteBuffer[0] = i
+                        fds.stderr(stderrStream.decode(byteBuffer, {stream: true}))
+                    },
                     isatty: true,
                 })
+                let stdoutStream = new TextDecoder()
                 this.pyodide.setStdout({
-                    raw: (i) => fds.stdout(String.fromCharCode(i)),
+                    raw: (i) => {
+                        byteBuffer[0] = i
+                        fds.stdout(stdoutStream.decode(byteBuffer, {stream: true}))
+                    },
                     isatty: true,
                 })
                 if (options.m) {
@@ -80,7 +91,7 @@ class PyscriptXtermElement extends XtermElement {
                         console.error(err)
                     }
                 } else {
-                    emsh.enterPythonMode(this.interpreter, interactiveSrc)
+                    emsh.enterPythonMode(this.pyodide, interactiveSrc)
                 }
                 this.pyodide.setStdin({
                     isatty: true,
@@ -137,7 +148,8 @@ export default class pyXtermPlugin {
                 "py-xterm",
                 class extends PyscriptXtermElement {
                     constructor() {
-                        super(interpreter.interface, globalThis['pyscript'].interpreter.FS)
+                        const pyscript = globalThis['pyscript']
+                        super(pyscript.interpreter.interface, pyscript.interpreter.FS)
                     }
                 })
         }, 0);

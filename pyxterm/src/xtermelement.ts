@@ -27,8 +27,26 @@ export class xtermElement extends HTMLElement {
         this.terminal.open(this)
         fit.fit()
 
-        this.emsh.write(`Started EmShell at ${new Date()}\n`)
-        this.emsh.write("Type 'help' to see a list of commands\n")
+        this.emsh.write(`
+_____             _ _         _____
+|  __ \\           | (_)       |  __ \\
+| |__) |   _  ___ | |_ _ __   | |  | | ___ _ __ ___   ___
+|  ___/ | | |/ _ \\| | | '_ \\  | |  | |/ _ \\ '_ \` _ \\ / _ \\
+| |   | |_| | (_) | | | | | | | |__| |  __/ | | | | | (_) |
+|_|    \\__, |\\___/|_|_|_| |_| |_____/ \\___|_| |_| |_|\\___/
+        __/ |
+        |___/                                               \n`)
+        this.emsh.write(`
+Welcome to the Pyolin demo. This is a simulated shell environment
+in the browser to test out pyolin.
+
+Pyolin is the tool to help write Python one liners. There are a
+number of data files in the current directory that you can use to
+test the functionalities of pyolin. For example, try
+
+    cat data_amazon_reviews.tsv | pyolin --input_separator='\\t' 'records'
+
+Type 'help' to see a list of commands\n`)
         this.emsh.shellRepl()
     }
 }

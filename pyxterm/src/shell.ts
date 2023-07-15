@@ -29,7 +29,7 @@ export class Emshell {
     terminal: Terminal
     keyhandler: IDisposable
     FS //Implements the Emscripten Filesystem API
-    commands = new Map<String, (FileDescriptorSet) => Command>()
+    commands = new Map<string, (FileDescriptorSet) => Command>()
     localEcho: LocalEchoController
     alternateHistory = []
     pyInterp = null
@@ -44,6 +44,17 @@ export class Emshell {
         terminal.loadAddon(this.localEcho);
         this.keyhandler = this.terminal.onKey(this.onKey.bind(this));
         this.makeCommands();
+
+        this.localEcho.addAutocompleteHandler(this.autocomplete.bind(this));
+    }
+
+    autocomplete(index: number, tokens: string[], ...args: any): string[] {
+        console.log('autocomplete', index, tokens, args);
+        if (index === 0) {
+            return [...this.commands.keys()];
+        }
+        // const lastToken = index < tokens.length ? tokens[index] : '';
+        return this.FS.readdir('.')
     }
 
     onKey(e: { key: string, domEvent: KeyboardEvent }, f: void) {
@@ -148,19 +159,7 @@ export class Emshell {
             if (operator !== undefined) {
                 throw Error(`Unsupported operator "${operator.op}"`)
             }
-            if (this.commands.has(tokens[0])) {
-                const command_fn = this.commands.get(tokens[0])
-                const command = command_fn(fds)
-                try {
-                    await command.parseAsync(tokens.slice(1), { from: 'user' })
-                } catch (e) {
-                    console.warn(e);
-                }
-            } else {
-                fds.stderr(`No command found matching '${tokens[0]}'. Known commands are `)
-                fds.stderr(Array.from(this.commands.keys()).join(', '))
-                fds.stderr('\n')
-            }
+            await this.executeCommand(tokens, fds)
         }
 
         const tokens = shellquote.parse(line)
@@ -168,7 +167,23 @@ export class Emshell {
         await runExpression(tokens, this.defaultFileDescriptorSet())
     }
 
-    addCommand(name: String, command: (fds: FileDescriptorSet) => Command) {
+    async executeCommand(tokens: string[], fds: FileDescriptorSet) {
+        if (this.commands.has(tokens[0])) {
+            const command_fn = this.commands.get(tokens[0])
+            const command = command_fn(fds)
+            try {
+                await command.parseAsync(tokens.slice(1), { from: 'user' })
+            } catch (e) {
+                console.warn(e);
+            }
+        } else {
+            fds.stderr(`No command found matching '${tokens[0]}'. Known commands are `)
+            fds.stderr(Array.from(this.commands.keys()).join(', '))
+            fds.stderr('\n')
+        }
+    }
+
+    addCommand(name: string, command: (fds: FileDescriptorSet) => Command) {
         this.commands.set(name, command)
     }
 
@@ -176,7 +191,7 @@ export class Emshell {
         this.addCommand('ls', (fds) => new Command().name('ls')
             .description("List files")
             .argument('[path]', 'the path to list files from (optional)')
-            .action(async (path: String, options) => {
+            .action(async (path: string, options) => {
                 if (!path) {
                     path = '.'
                 }
@@ -198,9 +213,8 @@ export class Emshell {
                         fds.stdout(`${pre}${path}${post}  `)
                     });
                     fds.stdout('\n')
-                }
-                catch (err) {
-                    fds.stderr(`Could not print files from path ${path}`)
+                } catch (err) {
+                    fds.stderr(`${this.fsErrorToString(path, err)}\n`)
                     console.error(err)
                 }
             })
@@ -228,17 +242,16 @@ export class Emshell {
         this.addCommand('cd', (fds) => new Command().name('cd')
             .description("Change the current working directory")
             .argument('[path]', 'the directory to change to')
-            .action(async (path: String, options) => {
+            .action(async (path: string, options) => {
                 if (!path) {
-                    fds.stderr("You must provide a [path] to change to\n")
-                } else {
-                    try {
-                        const foundNode = this.FS.lookupPath(path)
-                        this.FS.chdir(foundNode.path);
-                    }
-                    catch (error) {
-                        fds.stderr(`Could not resolve path '${path}'\n`)
-                    }
+                    path = '/home/pyodide'
+                }
+                try {
+                    const foundNode = this.FS.lookupPath(path)
+                    this.FS.chdir(foundNode.path);
+                } catch (error) {
+                    fds.stderr(`${this.fsErrorToString(path, error)}\n`)
+                    console.error(error)
                 }
             })
             .configureOutput(defaultOutputConfig(this))
@@ -267,7 +280,7 @@ export class Emshell {
                         fds.stdout(contents)
                     } catch (err) {
                         console.error(err)
-                        fds.stderr(`${err}\n`)
+                        fds.stderr(`${this.fsErrorToString(path, err)}\n`)
                     }
                 });
             })
@@ -354,6 +367,19 @@ export class Emshell {
             })
             .configureOutput(defaultOutputConfig(this))
         )
+    }
+
+    fsErrorToString(path: string, e: any): string {
+        // Basically `strerr` implemented in JS. (Does emscripten provide such an API for us?)
+        // Reference: https://github.com/emscripten-core/emscripten/blob/f51ae7f00792bcb9d4af7c8fcb73d305f899ba7a/system/include/wasi/api.h#L251
+        if (e.errno === 31) {
+            return `${path}: Is a directory`
+        } else if (e.errno === 44) {
+            return `${path}: No such file or directory`
+        } else if (e.errno === 54) {
+            return `${path}: Not a directory or a symbolic link to a directory`
+        }
+        return `${e}`
     }
 
     defaultFileDescriptorSet(): FileDescriptorSet {

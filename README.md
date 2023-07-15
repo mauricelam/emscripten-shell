@@ -1,4 +1,17 @@
-![The lgoo](logo_full.png)
+![The logo](logo_full.png)
+
+## Fork note
+
+I (Maurice) forked this project to create a browser-based demo of another Python-based project I am working on (`pyolin`).
+Currently the code here is configured specifically to my demo purposes, but with a few changes it's possible to make this
+generic to other projects.
+
+If I get some more time, I will package this in a way that's suitable for other projects to use, but for now, here's the
+list of things that needs to be changed to turn this into a demo for another python project.
+
+* The configurations in `index.html` should be updated to load different PyPI packages and fetch different example files
+* The `addCommand('pyolin', ...)` in `pyxtermplugin.ts` should be removed or changed to something else suitable for your
+  project.
 
 # Emscripten Shell
 

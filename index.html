@@ -6,13 +6,33 @@
     <script defer src="/include/pyscript.js"></script>
 </head>
 
-<body>
+<body style="background-color: black;">
     <py-config>
         plugins = ["./pyxterm/build/pyxterm.js"]
+        packages = ["hashbang", "pyolin"]
         [[interpreters]]
         src = "/pyxterm/node_modules/pyodide/pyodide.js"
         name = "pyodide"
         lang = "python"
+        [[fetch]]
+        from = "https://raw.githubusercontent.com/mauricelam/pyolin/main/pyolin/test/"
+        files = [
+            "data_addresses_unix.csv",
+            "data_addresses_with_header.csv",
+            "data_addresses.csv",
+            "data_amazon_reviews.tsv",
+            "data_colors.json",
+            "data_files_with_header.txt",
+            "data_files.txt",
+            "data_formatting.txt",
+            "data_grades_simple_csv.csv",
+            "data_grades_with_header.csv",
+            "data_nba.txt",
+            "data_news_decline.csv",
+            "data_news_decline.tsv",
+            "data_onerow.csv",
+            "data_pickle",
+        ]
     </py-config>
 
     <py-xterm></py-xterm>

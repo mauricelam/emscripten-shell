@@ -57,4 +57,15 @@ class xtermInteractive(InteractiveConsole):
             self.emshell.exitPythonMode()
 
 
+def _pyterm_run_module(module_name, args):
+    import pyodide
+    import sys
+    try:
+        sys.argv = ['prog', *args.to_py()]
+        import runpy; runpy.run_module(module_name, run_name = '__main__', alter_sys = True)
+    except SystemExit:
+        pass
+    except Exception as e:
+        print(e, file=sys.stderr)
+
 xtermInteractive

@@ -27,29 +27,72 @@ class pyscriptXtermElement extends xtermElement {
     }
 
     addPythonCommands(pyscriptModule) {
+        const emsh = this.emsh;
+        this.emsh.addCommand('pyolin', (fds) => new Command().name('pyolin')
+            .description('Python one liners to easily parse and process data in Python.')
+            .argument('[args...]', 'Pyolin program to execute')
+            .allowUnknownOption()
+            .action(async function (args) {
+                emsh.executeCommand(['python', '-m', 'pyolin', ...args], fds)
+            })
+            .configureOutput(defaultOutputConfig(this.emsh)))
         this.emsh.addCommand('python', (fds) => new Command().name('python')
             .description("Run the python interpreter")
-            .argument('[file]', 'Python file to execute')
-            .option('-m <path>', "Run the specified python module")
-            .action(async (file, options) => {
+            .argument('[args...]', 'Python file to execute')
+            .option('-m <module>', "Run the specified python module")
+            .option('-c <code>', "Program passed in as string")
+            .allowUnknownOption()
+            .allowExcessArguments()
+            .action(async function (args, options) {
+                const stdin_iter = [fds.stdin].values()
+                pyscriptModule.interpreter.interface.setStdin({
+                    isatty: true,
+                    stdin: () => stdin_iter.next().value,
+                })
+                pyscriptModule.interpreter.interface.setStderr({
+                    raw: (i) => fds.stderr(String.fromCharCode(i)),
+                    isatty: true,
+                })
+                pyscriptModule.interpreter.interface.setStdout({
+                    raw: (i) => fds.stdout(String.fromCharCode(i)),
+                    isatty: true,
+                })
                 if (options.m) {
                     try {
-                        pyscriptModule.interpreter.interface.runPython(`import runpy; runpy.run_module('${options.m}')`)
+                        pyscriptModule.interpreter.interface.runPython(interactiveSrc)
+                        pyscriptModule.interpreter.interface.runPython('_pyterm_run_module')(options.m, args)
                     } catch (err) {
-                        fds.stderr(`Error running python module '${options.m}'\n`)
+                        fds.stderr(`Error running python module '${options.m}':\n${err}`)
                         console.error(err)
                     }
-                } else if (file) {
+                } else if (options.c) {
                     try {
-                        const filesrc = this.emsh.FS.readFile(file, encodingUTF8)
+                        pyscriptModule.interpreter.interface.runPython(options.c)
+                    } catch (err) {
+                        fds.stderr(`Error running python code\n`)
+                        console.error(err)
+                    }
+                } else if (args.length) {
+                    try {
+                        const filesrc = emsh.FS.readFile(args[0], encodingUTF8)
                         pyscriptModule.interpreter.interface.runPython(filesrc)
                     } catch (err) {
-                        fds.stderr(`Could not read source file '${file}'\n`)
+                        fds.stderr(`Could not read source file '${args[0]}'\n`)
                         console.error(err)
                     }
                 } else {
-                    this.emsh.enterPythonMode(pyscriptModule, interactiveSrc)
+                    emsh.enterPythonMode(pyscriptModule, interactiveSrc)
                 }
+                pyscriptModule.interpreter.interface.setStdin({
+                    isatty: true,
+                    stdin: () => null,
+                })
+                pyscriptModule.interpreter.interface.setStderr({
+                    batched: emsh.write.bind(emsh)
+                })
+                pyscriptModule.interpreter.interface.setStdin({
+                    batched: emsh.write.bind(emsh)
+                })
             })
             .configureOutput(defaultOutputConfig(this.emsh))
         )

@@ -27,6 +27,8 @@ export class xtermElement extends HTMLElement {
         this.terminal.open(this)
         fit.fit()
 
+        new ResizeObserver((entries) => fit.fit()).observe(this)
+
         this.emsh.write(`
 _____             _ _         _____
 |  __ \\           | (_)       |  __ \\
@@ -44,7 +46,7 @@ Pyolin is the tool to help write Python one liners. There are a
 number of data files in the current directory that you can use to
 test the functionalities of pyolin. For example, try
 
-    cat data_amazon_reviews.tsv | pyolin --input_separator='\\t' 'records'
+    cat data_addresses_unix.csv | pyolin --field_separator=, 'r for r in records if r[3] == "Riverside"'
 
 Type 'help' to see a list of commands\n`)
         this.emsh.shellRepl()

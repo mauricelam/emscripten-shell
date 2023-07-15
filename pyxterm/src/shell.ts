@@ -88,8 +88,8 @@ export class Emshell {
         }
     }
 
-    enterPythonMode(pyscriptModule, interactiveSrc) {
-        const pyInterpClass = pyscriptModule.interpreter.interface.runPython(interactiveSrc)
+    enterPythonMode(pyodide, interactiveSrc) {
+        const pyInterpClass = pyodide.runPython(interactiveSrc)
         this.pyInterp = pyInterpClass(this)
 
         this.keyhandler.dispose()

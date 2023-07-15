@@ -1,22 +1,21 @@
 import "../node_modules/xterm/css/xterm.css"
 
-import { xtermElement, defaultOutputConfig } from "./xtermelement"
+import { xtermElement as XtermElement, defaultOutputConfig } from "./xtermelement"
 import { encodingUTF8 } from "./shell"
 import { Command } from "commander"
 
 import interactiveSrc from "./interactive.py"
 
-class pyscriptXtermElement extends xtermElement {
-    pyscript //PyScriptApp
+class PyscriptXtermElement extends XtermElement {
     copyBlocker: EventListener | null
 
-    constructor() {
-        super()
+    constructor(private pyodide, FS) {
+        super(FS)
     }
 
     connectedCallback(): void {
         super.connectedCallback();
-        this.addPythonCommands(globalThis['pyscript']);
+        this.addPythonCommands();
         this.addEventListener('focusin', (event) => {
             this.addEventListener('copy', this.blockCopy);
         });
@@ -26,7 +25,7 @@ class pyscriptXtermElement extends xtermElement {
         });
     }
 
-    addPythonCommands(pyscriptModule) {
+    addPythonCommands() {
         const emsh = this.emsh;
         this.emsh.addCommand('pyolin', (fds) => new Command().name('pyolin')
             .description('Python one liners to easily parse and process data in Python.')
@@ -45,29 +44,29 @@ class pyscriptXtermElement extends xtermElement {
             .allowExcessArguments()
             .action(async function (args, options) {
                 const stdin_iter = [fds.stdin].values()
-                pyscriptModule.interpreter.interface.setStdin({
+                this.pyodide.setStdin({
                     isatty: true,
                     stdin: () => stdin_iter.next().value,
                 })
-                pyscriptModule.interpreter.interface.setStderr({
+                this.pyodide.setStderr({
                     raw: (i) => fds.stderr(String.fromCharCode(i)),
                     isatty: true,
                 })
-                pyscriptModule.interpreter.interface.setStdout({
+                this.pyodide.setStdout({
                     raw: (i) => fds.stdout(String.fromCharCode(i)),
                     isatty: true,
                 })
                 if (options.m) {
                     try {
-                        pyscriptModule.interpreter.interface.runPython(interactiveSrc)
-                        pyscriptModule.interpreter.interface.runPython('_pyterm_run_module')(options.m, args)
+                        this.pyodide.runPython(interactiveSrc)
+                        this.pyodide.runPython('_pyterm_run_module')(options.m, args)
                     } catch (err) {
                         fds.stderr(`Error running python module '${options.m}':\n${err}`)
                         console.error(err)
                     }
                 } else if (options.c) {
                     try {
-                        pyscriptModule.interpreter.interface.runPython(options.c)
+                        this.pyodide.runPython(options.c)
                     } catch (err) {
                         fds.stderr(`Error running python code\n`)
                         console.error(err)
@@ -75,22 +74,22 @@ class pyscriptXtermElement extends xtermElement {
                 } else if (args.length) {
                     try {
                         const filesrc = emsh.FS.readFile(args[0], encodingUTF8)
-                        pyscriptModule.interpreter.interface.runPython(filesrc)
+                        this.pyodide.runPython(filesrc)
                     } catch (err) {
                         fds.stderr(`Could not read source file '${args[0]}'\n`)
                         console.error(err)
                     }
                 } else {
-                    emsh.enterPythonMode(pyscriptModule, interactiveSrc)
+                    emsh.enterPythonMode(this.interpreter, interactiveSrc)
                 }
-                pyscriptModule.interpreter.interface.setStdin({
+                this.pyodide.setStdin({
                     isatty: true,
                     stdin: () => null,
                 })
-                pyscriptModule.interpreter.interface.setStderr({
+                this.pyodide.setStderr({
                     batched: emsh.write.bind(emsh)
                 })
-                pyscriptModule.interpreter.interface.setStdin({
+                this.pyodide.setStdin({
                     batched: emsh.write.bind(emsh)
                 })
             })
@@ -106,7 +105,7 @@ class pyscriptXtermElement extends xtermElement {
                 .argument('[packages...]', 'the packages to be installed')
                 .action(async (packages) => {
                     try {
-                        await pyscriptModule.interpreter.interface.loadPackage(
+                        await this.pyodide.loadPackage(
                             packages,
                             {
                                 messageCallback: (str) => { fds.stdout(str + "\n") },
@@ -114,7 +113,7 @@ class pyscriptXtermElement extends xtermElement {
                             }
                         )
 
-                        const importlib = pyscriptModule.interpreter.interface.pyimport("importlib")
+                        const importlib = this.pyodide.pyimport("importlib")
                         importlib.invalidate_caches()
                     } catch (e) {
                         fds.stderr(e.message + '\n')
@@ -127,14 +126,20 @@ class pyscriptXtermElement extends xtermElement {
     }
 
     blockCopy(event) {
-        event.preventDefault; return false;
+        event.preventDefault()
     }
 }
 export default class pyXtermPlugin {
     afterSetup(interpreter) {
         setTimeout(() => {
             // Wait for pyscript things to finish initializing. (pyscript.interpreter in particular)
-            customElements.define("py-xterm", pyscriptXtermElement)
+            customElements.define(
+                "py-xterm",
+                class extends PyscriptXtermElement {
+                    constructor() {
+                        super(interpreter.interface, globalThis['pyscript'].interpreter.FS)
+                    }
+                })
         }, 0);
     }
     beforePyScriptExec() { }

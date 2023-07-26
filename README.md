@@ -2,7 +2,7 @@
 
 ## Fork note
 
-I (Maurice) forked this project to create a browser-based demo of another Python-based project I am working on
+This fork was created for a browser-based demo of another Python-based project I am working on
 ([`pyolin`](https://github.com/mauricelam/pyolin)). Currently the code here is configured specifically to my
 demo purposes, but with a few changes it's possible to make this generic to other projects.
 
@@ -12,6 +12,13 @@ list of things that needs to be changed to turn this into a demo for another pyt
 * The configurations in `index.html` should be updated to load different PyPI packages and fetch different example files
 * The `addCommand('pyolin', ...)` in `pyxtermplugin.ts` should be removed or changed to something else suitable for your
   project.
+
+Changes in this fork:
+
+* Use `local-echo` to support arrow keys and autocomplete
+* Added a few commands, like `mkdir` and `grep`
+* Support for basic shell syntax, like `&&`, `||`, and `|`. Note that this is very barebones – the execution is not
+  concurrent, and exit codes are always assumed to be 0.
 
 # Emscripten Shell
 
